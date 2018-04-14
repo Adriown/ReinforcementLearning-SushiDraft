@@ -29,8 +29,9 @@ def sarsa_lambda(qStateActionSpace,
     """    
     
     win_percents = DataFrame() # Track the win percentages across players (draws count as wins)
-    E=qStateActionSpace.copy()
+    
     for i in range(1, max(measureWinPoints) + 1): # for every episode
+        E=qStateActionSpace.copy()
         totalReward = 0
         dummy = SushiDraft(1, 5, score_tokens, deck, 0) # random initialization of the game
         isPlaying = 1
