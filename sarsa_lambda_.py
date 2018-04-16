@@ -29,8 +29,9 @@ def sarsa_lambda(qStateActionSpace,
     """    
     
     win_percents = DataFrame() # Track the win percentages across players (draws count as wins)
-    E=qStateActionSpace.copy()
+    
     for i in range(1, max(measureWinPoints) + 1): # for every episode
+        E=qStateActionSpace.copy()
         totalReward = 0
         dummy = SushiDraft(1, 5, score_tokens, deck, 0) # random initialization of the game
         isPlaying = 1
@@ -76,13 +77,19 @@ def sarsa_lambda(qStateActionSpace,
             nextState = [currentState(dummy.hand_cards[0]),currentState(dummy.played_cards[0])]
             # Selecting the possible actions corresponding to this current state
             possNextActions = qStateActionSpace[qStateActionSpace['state'] == str(nextState)]
+            
+            ###############
+            #   JO's PART #
+            ###############
+            
             # Check if we finished the round just now
             if dummy.num_cards_played != 0:
                 piNextActionIndex = possNextActions.sample(len(possNextActions))['Q'].idxmax()
                 # PERFORM THE Q-update
                 delta=immedReward+gamma*qStateActionSpace.loc[piNextActionIndex, 'Q']- qStateActionSpace.loc[muActionIndex, 'Q']
                 E.loc[muActionIndex, 'Q']+=1
-                for s in range(len(qStateActionSpace)):   
+                update_these = np.where(E['Q'] != 0)[0]
+                for s in update_these:   
                     qStateActionSpace.loc[s, 'Q'] += alpha * delta * E.loc[s, 'Q']
                     E.loc[s,'Q']=gamma*lambda_*E.loc[s,'Q']
             else:
@@ -92,7 +99,8 @@ def sarsa_lambda(qStateActionSpace,
                 # Think about if we want to keep it this way. We're basically saying the terminal state has value 0, which is probably reasonable
                 delta=immedReward+gamma*0- qStateActionSpace.loc[muActionIndex, 'Q']
                 E.loc[muActionIndex, 'Q']+=1
-                for s in range(len(qStateActionSpace)):   
+                update_these = np.where(E['Q'] != 0)[0]
+                for s in update_these:  
                     qStateActionSpace.loc[s, 'Q'] += alpha * delta * E.loc[s, 'Q']
                     E.loc[s,'Q']=gamma*lambda_*E.loc[s,'Q']
                 
@@ -157,3 +165,12 @@ def sarsa_lambda(qStateActionSpace,
     qStateActionSpace = qStateActionSpace[['method', 'state', 'action', 'Q']]
     # Return the q-state action values and our optimal policy win rates
     return (qStateActionSpace, win_percents)
+
+
+### copy into sushidraft.py ###
+#from sarsa_lambda_ import sarsa_lambda
+#qStateActionSpace, win_percents = qLearning(possStateActions)
+#qStateActionSpace, win_percents = sarsa_lambda(qStateActionSpace.drop(['method'], axis = 1),
+#                                            measureWinPoints = np.asarray([1000]), 
+#                                            numIterations = np.asarray([100]))
+#win_percents
