@@ -388,6 +388,8 @@ def qLearning(qStateActionSpace, epsilon = .9, alpha = .5, gamma = 1, measureWin
     This function returns an updated qStateActionSpace and DataFrames with information about
     the win rates of our optimal policy at different measureWinPoints
     """
+    measureWinPoints = np.asarray(measureWinPoints)
+    numIterations = np.asarray(numIterations)
     win_percents = DataFrame() # Track the win percentages across players (draws count as wins)
     for i in range(1, max(measureWinPoints) + 1): # Perform the algorithm as many times as we want
         totalReward = 0
@@ -404,11 +406,11 @@ def qLearning(qStateActionSpace, epsilon = .9, alpha = .5, gamma = 1, measureWin
             if np.random.random() < greedy_prob:
                 # Take the greedy action
                 muActionIndex = possActions.sample(len(possActions))['Q'].idxmax()
-                piActionIndex = muActionIndex.copy()
+#                piActionIndex = muActionIndex.copy()
             else:
                 # Take a random action
                 muActionIndex = possActions.sample(1)['Q'].idxmax()
-                piActionIndex = possActions.sample(len(possActions))['Q'].idxmax()
+#                piActionIndex = possActions.sample(len(possActions))['Q'].idxmax()
             
             # Now record what our character is going to do
             play_card, keep_card, is_wildcard = possActions.loc[muActionIndex]['action']
@@ -547,6 +549,8 @@ def monteCarloES(qStateActionSpace, epsilon = .9, alpha = 0, gamma = 1, measureW
     This function returns an updated qStateActionSpace and DataFrames with information about
     the win rates of our optimal policy at different measureWinPoints
     """
+    measureWinPoints = np.asarray(measureWinPoints)
+    numIterations = np.asarray(numIterations)
     # Pick the following hands for our player to start out with (with equal probabilities)
     possibleInitialHands = [currentHand(state) for state in possibleInitialStates]
     
@@ -701,6 +705,210 @@ qStateActionSpace, win_percents = monteCarloES(possStateActions,
                                             measureWinPoints = np.asarray([1000]), 
                                             numIterations = np.asarray([1000]))
 
+
+
+
+############################################
+####                                   #####
+####    Monte Carlo Exploring Starts   #####
+####                                   #####
+############################################
+def sarsa_lambda(qStateActionSpace, epsilon=.9, alpha = .5, gamma = 1, lambda_ = .1, 
+                 measureWinPoints = np.asarray([10, 20]), numIterations = np.asarray([20, 30])):
+    """
+    This function implements backward view of Sarsa(lambda). 
+        
+    Notes on inputs:    
+    -transition: function. It takes current state s and action a as parameters 
+                and returns next state s', immediate reward R, and a boolean 
+                variable indicating whether s' is a terminal state. 
+                (See windy_setup as an example)
+    -epsilon: exploration rate as in epsilon-greedy policy. 
+               IS IT CORRECT TO USE 0.9?
+    -measureWinPoints: an ndarray that lists the number of games to be played before evaluating
+                        the win rate
+    -numIterations:the number of times we want to simulate using the optimal policy
+                     to find the win percentage
+    
+    """   
+#    try:
+#        qStateActionSpace = qStateActionSpace.drop('method', 1)
+#    except:
+#        print("No method column drop")
+#    measureWinPoints = np.asarray(measureWinPoints)
+#    numIterations = np.asarray(numIterations)
+    
+    win_percents = DataFrame() # Track the win percentages across players (draws count as wins)
+    for i in range(1, max(measureWinPoints) + 1): # for every episode
+        print(i)
+        totalReward = 0
+        dummy = SushiDraft(1, 5, score_tokens, deck, 0) # random initialization of the game
+        isPlaying = 1
+        
+        ########################
+        ###  ADRIAN COMMENT  ###
+        ########################
+        # I was thinking that we could reset the eligibility traces back to 0 here, 
+        # at the beginning of an episode, but I was also thinking that we could do
+        # it at the beginning of each of the 3 rounds...
+        qStateActionSpace['E'] = 0
+
+        
+        while(isPlaying): # while not terminate, play a round
+#            print(isPlaying)
+            # Need to take care of initial action selection
+            if dummy.num_cards_played == 0:
+                currState = [currentState(dummy.hand_cards[0]),currentState(dummy.played_cards[0])]
+                # Selecting the possible actions corresponding to this current state
+                possActions = qStateActionSpace[qStateActionSpace['state'] == str(currState)]
+                # Epsilon-greedy implementation
+                greedy_prob = 1 - epsilon
+
+                # Reset the eligibility trace
+                qStateActionSpace['E'] = 0
+                # Now decide which action to take -- only done this way for the first move each round
+                if np.random.random() < greedy_prob:
+                    # Take the greedy action
+                    muActionIndex = possActions.sample(len(possActions))['Q'].idxmax()
+                else:
+                    # Take a random action
+                    muActionIndex = possActions.sample(1)['Q'].idxmax()
+            # Otherwise, we just use the actions selected in the following steps
+            
+            # Now record what our character is going to do
+            play_card, keep_card, is_wildcard = possActions.loc[muActionIndex]['action']
+            
+            # Figure out what the competition is going to do
+            play_cards, keep_cards, is_wildcards = randomMoves(dummy.hand_cards, dummy.played_cards, range(1, dummy.num_players))
+            play_cards.insert(0, play_card)
+            keep_cards.insert(0, keep_card)
+            is_wildcards.insert(0, is_wildcard)
+                
+            # Take a turn of the game
+            isPlaying = dummy.takeTurn(play_cards, keep_cards, is_wildcards)
+         
+           # REWARDS ARE HERE
+            # Check if the round ended. If so, reward will be equal to the value of the accrued score tokens
+            if dummy.num_cards_played == 0: # This occurs when we hit the end of a round and score tokens are passed out
+                immedReward = dummy.player_tokens[0] - totalReward
+                totalReward = dummy.player_tokens[0].copy()
+            else:
+                immedReward = 0
+            
+            # Figure out the Q-value of the next state
+            nextState = [currentState(dummy.hand_cards[0]),currentState(dummy.played_cards[0])]
+            # Selecting the possible actions corresponding to this current state
+            possNextActions = qStateActionSpace[qStateActionSpace['state'] == str(nextState)]
+            # Check if we finished the round just now
+            if dummy.num_cards_played != 0:
+                # Need to do epsilon-greedy again
+                if np.random.random() < greedy_prob:
+                    # Take the greedy action
+                    piNextActionIndex = possNextActions.sample(len(possNextActions))['Q'].idxmax()
+                else:
+                    # Take a random action
+                    piNextActionIndex = possNextActions.sample(1)['Q'].idxmax()
+                
+                # PERFORM THE Q-update
+                delta = immedReward + gamma * qStateActionSpace.loc[piNextActionIndex, 'Q'] - qStateActionSpace.loc[muActionIndex, 'Q']
+                qStateActionSpace.loc[muActionIndex, 'E'] += 1
+                
+                ########################
+                ###  ADRIAN COMMENT  ###
+                ########################
+                qStateActionSpace['Q'] += alpha * delta * qStateActionSpace['E']
+                qStateActionSpace['E'] += gamma * lambda_ * qStateActionSpace['E']
+                
+                # Now set the next state/action to be the current state/action
+                currState = nextState.copy()
+                muActionIndex = piNextActionIndex.copy()
+                possActions = possNextActions.copy()
+#                update_these = np.where(E['Q'] != 0)[0]
+#                
+#                for s in update_these:  
+#                    print(s)
+#                    qStateActionSpace.loc[s, 'Q'] += alpha * delta * E.loc[s, 'Q']
+#                    E.loc[s,'Q']=gamma*lambda_*E.loc[s,'Q']
+            else:
+    #            print("End of the round")
+    #            print("Immediate Reward: " + str(immedReward))
+                # This is the case where the round was finished
+                # Think about if we want to keep it this way. We're basically saying the terminal state has value 0, which is probably reasonable
+                delta = immedReward + gamma * 0 - qStateActionSpace.loc[muActionIndex, 'Q']
+                qStateActionSpace.loc[muActionIndex, 'E'] += 1
+                # Go through and update the Q and E values
+                qStateActionSpace['Q'] += alpha * delta * qStateActionSpace['E']
+                qStateActionSpace['E'] += gamma * lambda_ * qStateActionSpace['E']
+
+        # THIS PORTION IS ABOUT GETTING THE PERFORMANCE OF OUR OPTIMAL POLICY
+        if np.any(i == measureWinPoints): # Run this once we hit a certain number of game iterations run
+            # Get the trials we want to accomplish to check our win percentage
+            num_trials = numIterations[np.where(i == measureWinPoints)[0]][0]
+            print("Evaluating the win percentage of our trained agent after " + str(i) + \
+                  " iterations of the game. Going to perform " + str(num_trials) + " trials.")
+            # Initialize some counts of to keep track of winners
+            win_counts = Series([0] * dummy.num_players, range(dummy.num_players))
+            # We can use these next two to figure out what percentage of the state-space we actually visited across out trials
+            no_value = 0 
+            total_values = 0
+            # Run the optimal policy across num_trials number of games
+            for j in range(num_trials):
+    #                if j % 10 == 0:
+    #                    print(i)
+                totalReward = 0
+                dummy = SushiDraft(1, 5, score_tokens, deck, 0) # random initialization of the game
+                isPlaying = 1
+                while(isPlaying):
+                    total_values += 1
+                    currState = [currentState(dummy.hand_cards[0]),
+                                 currentState(dummy.played_cards[0])]
+                    # Selecting the possible actions corresponding to this current state
+                    possActions = qStateActionSpace[qStateActionSpace['state'] == str(currState)]
+                    
+                    # Figure out what proportion of states haven't been visited
+                    if possActions.sample(len(possActions))['Q'].max() == 0:
+                        no_value += 1
+                    
+                    # Now decide which action to take -- follow optimal
+                    piActionIndex = possActions.sample(len(possActions))['Q'].idxmax()
+                    
+                    # Now record what our character is going to do
+                    play_card, keep_card, is_wildcard = possActions.loc[piActionIndex]['action']
+                    
+                    # Figure out what the competition is going to do
+                    play_cards, keep_cards, is_wildcards = randomMoves(dummy.hand_cards, dummy.played_cards, range(1, dummy.num_players))
+                    play_cards.insert(0, play_card)
+                    keep_cards.insert(0, keep_card)
+                    is_wildcards.insert(0, is_wildcard)
+                        
+                    # Take a turn of the game
+                    isPlaying = dummy.takeTurn(play_cards, keep_cards, is_wildcards)
+                # Figure out who won
+                win_counts += getWinner(dummy.player_tokens)
+            # Go through and format the DataFrame() the way we want
+            win_percent = DataFrame(win_counts, columns = ['nWins'])
+            win_percent['nTrials'] = num_trials
+            win_percent['player'] = range(dummy.num_players)
+            win_percent['nTrainIter'] = i
+            win_percent['winPercent'] = win_percent['nWins'] / win_percent['nTrials']
+            # Now append the new percentages
+            win_percents = win_percents.append(win_percent)
+    # Append a method for the sake of remembering what we did
+    win_percents['method'] = 'sarsa_lambda'
+    win_percents = win_percents[['method', 'player','nTrainIter', 'nTrials', 'nWins', 'winPercent']]
+    qStateActionSpace['method'] = 'sarsa_lambda'
+    qStateActionSpace = qStateActionSpace[['method', 'state', 'action', 'Q']]
+    # Return the q-state action values and our optimal policy win rates
+    return (qStateActionSpace, win_percents)
+
+qStateActionSpace, win_percents = sarsa_lambda(qStateActionSpace, measureWinPoints=[1000], numIterations=[1000])
+# Train over 2000 games and simulate 1000 games
+#         method  player  nTrainIter  nTrials  nWins  winPercent
+#0  sarsa_lambda       0        1000     1000    336       0.336
+#1  sarsa_lambda       1        1000     1000    238       0.238
+#2  sarsa_lambda       2        1000     1000    172       0.172
+#3  sarsa_lambda       3        1000     1000    176       0.176
+#4  sarsa_lambda       4        1000     1000    186       0.186
 
 
 
