@@ -363,7 +363,9 @@ possStateActions = possStateActions[['state','action','Q']]
 ####    Q-Learning Control   #####
 ####                         #####
 ##################################
-def qLearning(qStateActionSpace, epsilon = .9, alpha = .5, gamma = 1, measureWinPoints = np.asarray([10, 20]), numIterations = np.asarray([20, 30])):
+def qLearning(qStateActionSpace, epsilon = .9, alpha = .5, gamma = 1, 
+              measureWinPoints = np.asarray([10, 20]), numIterations = np.asarray([20, 30]),
+              numPlayers = 5):
     """
     THIS IS WHERE THE HEAVY LIFTING IS HAPPENING.
     
@@ -393,7 +395,7 @@ def qLearning(qStateActionSpace, epsilon = .9, alpha = .5, gamma = 1, measureWin
     win_percents = DataFrame() # Track the win percentages across players (draws count as wins)
     for i in range(1, max(measureWinPoints) + 1): # Perform the algorithm as many times as we want
         totalReward = 0
-        dummy = SushiDraft(1, 5, score_tokens, deck, 0) # random initialization of the game
+        dummy = SushiDraft(1, numPlayers, score_tokens, deck, 0) # random initialization of the game
         isPlaying = 1
         while(isPlaying): # Run through one full game, peforming control as we go
             currState = [currentState(dummy.hand_cards[0]),
@@ -465,7 +467,7 @@ def qLearning(qStateActionSpace, epsilon = .9, alpha = .5, gamma = 1, measureWin
     #                if j % 10 == 0:
     #                    print(i)
                 totalReward = 0
-                dummy = SushiDraft(1, 5, score_tokens, deck, 0) # random initialization of the game
+                dummy = SushiDraft(1, numPlayers, score_tokens, deck, 0) # random initialization of the game
                 isPlaying = 1
                 while(isPlaying):
                     total_values += 1
@@ -524,7 +526,10 @@ def qLearning(qStateActionSpace, epsilon = .9, alpha = .5, gamma = 1, measureWin
 ####    Monte Carlo Exploring Starts   #####
 ####                                   #####
 ############################################
-def monteCarloES(qStateActionSpace, epsilon = .9, alpha = 0, gamma = 1, measureWinPoints = np.asarray([10, 20]), numIterations = np.asarray([20, 30]), possibleInitialStates = [state for state in handStates if sum(state) == 6]):
+def monteCarloES(qStateActionSpace, epsilon = .9, alpha = 0, gamma = 1, 
+                 measureWinPoints = np.asarray([10, 20]), numIterations = np.asarray([20, 30]), 
+                 possibleInitialStates = [state for state in handStates if sum(state) == 6],
+                 numPlayers = 5):
     """
     THIS IS WHERE THE HEAVY LIFTING IS HAPPENING.
     
@@ -569,7 +574,7 @@ def monteCarloES(qStateActionSpace, epsilon = .9, alpha = 0, gamma = 1, measureW
         initialActionIndices = [qStateActionSpace[qStateActionSpace['state'].str.slice(1,19) == str(state.tolist())].sample(1).index.tolist()[0] for state in initialStates]
         qStateActionSpace.iloc[initialActionIndices]
         
-        dummy = SushiDraft(1, 5, score_tokens, deck, 0, one_player_hands = initialHands) # random initialization of the game
+        dummy = SushiDraft(1, numPlayers, score_tokens, deck, 0, one_player_hands = initialHands) # random initialization of the game
         isPlaying = 1
         
         # Keep track of the episodes as they are played
@@ -655,7 +660,7 @@ def monteCarloES(qStateActionSpace, epsilon = .9, alpha = 0, gamma = 1, measureW
     #                if j % 10 == 0:
     #                    print(i)
                 totalReward = 0
-                dummy = SushiDraft(1, 5, score_tokens, deck, 0) # random initialization of the game
+                dummy = SushiDraft(1, numPlayers, score_tokens, deck, 0) # random initialization of the game
                 isPlaying = 1
                 while(isPlaying):
                     total_values += 1
@@ -714,7 +719,8 @@ qStateActionSpace, win_percents = monteCarloES(possStateActions,
 ####                                   #####
 ############################################
 def sarsa_lambda(qStateActionSpace, epsilon=.9, alpha = .5, gamma = 1, lambda_ = .1, 
-                 measureWinPoints = np.asarray([10, 20]), numIterations = np.asarray([20, 30])):
+                 measureWinPoints = np.asarray([10, 20]), numIterations = np.asarray([20, 30]), 
+                 numPlayers = 5, score_tokens):
     """
     This function implements backward view of Sarsa(lambda). 
         
@@ -742,7 +748,7 @@ def sarsa_lambda(qStateActionSpace, epsilon=.9, alpha = .5, gamma = 1, lambda_ =
     for i in range(1, max(measureWinPoints) + 1): # for every episode
         print(i)
         totalReward = 0
-        dummy = SushiDraft(1, 5, score_tokens, deck, 0) # random initialization of the game
+        dummy = SushiDraft(1, numPlayers, score_tokens, deck, 0) # random initialization of the game
         isPlaying = 1
         
         ########################
@@ -856,7 +862,7 @@ def sarsa_lambda(qStateActionSpace, epsilon=.9, alpha = .5, gamma = 1, lambda_ =
     #                if j % 10 == 0:
     #                    print(i)
                 totalReward = 0
-                dummy = SushiDraft(1, 5, score_tokens, deck, 0) # random initialization of the game
+                dummy = SushiDraft(1, numPlayers, score_tokens, deck, 0) # random initialization of the game
                 isPlaying = 1
                 while(isPlaying):
                     total_values += 1
