@@ -43,7 +43,7 @@ class SushiDraft:
     is with the takeTurn function. takeTurn() is passed cards to play for each player, cards to
     save for each player, and if any of the cards played are being done as a wildcard
     """
-    def __init__(self, num_round, num_players, score_tokens_avail, deck, num_cards_played, hand_cards = [], played_cards = [], player_tokens = Series(), one_player_hands = []):  # constructor
+    def __init__(self, num_round, num_players, score_tokens_avail, deck, num_cards_played, hand_cards = [], played_cards = [], player_tokens = Series(), one_player_hands = [], suppressPrint = True):  # constructor
 #        fields: num_round, num_players, score_tokens_avail (a Series), deck (a list), num_cards_played 
 #        (from 0 to 4 when initializing), hand_cards (a list of ndarrays), played_cards 
 #        (a list of ndarrays), and player_tokens (a Series)
@@ -110,9 +110,10 @@ class SushiDraft:
             if self.num_round == 3: # This is for the case where we've finished the 3rd round
                 self.num_cards_played = 0
                 # EXIT GAME
-                print("GAME IS OVER")
-                print("Results:")
-                print(self.player_tokens)
+                if suppressPrint == False:
+                    print("GAME IS OVER")
+                    print("Results:")
+                    print(self.player_tokens)
                 return 0
             # RESET THE GAME NOW THAT POINTS HAVE BEEN HANDED OUT
 #            np.random.seed(1)
