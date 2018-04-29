@@ -25,7 +25,7 @@ possStates_df=possStates_df.drop(['Unnamed: 0'],axis=1)
         #2: Other States
 
 # The original possStates is a list of list. 
-# The following part is trying to convert pd to list of list. (sorry that it is kind of slow)
+# The following part is trying to convert pd to list of list. (sorry that it is kind of slow ~ 5min) 
 possStates=list()
 for i in range(len(possStates_df)):
     theRow=list()
@@ -33,20 +33,22 @@ for i in range(len(possStates_df)):
         theRow.append(ast.literal_eval(possStates_df.iloc[i][j]))
     possStates.append(theRow)                  
 
-# THIS PART IS HUGE. I'm constructing a comprehensive state-action space to hold. sorry, it is very very slow.
+# THIS PART IS HUGE. I'm constructing a comprehensive state-action space to hold. sorry, it is very very slow. (begin: 4:06pm)
 # Used the function in SushiDraft.py
 possStateActions = DataFrame()
 possStatesLen=len(possStates)
 for i in range(possStatesLen): # Run through each of the states we've identified
     if i%1000==0:
         print ("{0:.0f}%".format(i/possStatesLen * 100))
-        break
+        
     possStateAction = DataFrame()
     # And now identify every single possible action for that state
     possStateAction['action'] = possibleActions(possStates[i][0], possStates[i][1])
     # Note that in order to get this to work, I needed to make the state a string
     possStateActions['state'] = str(possStates[i])
     possStateActions = possStateActions.append(possStateAction)
+
+# ------------------------------------------- I have not run the code below ------------------------------------    
 possStateActions = possStateActions.reset_index()
 possStateActions = possStateActions.drop('index', axis = 1)
 possStateActions['Q'] = 0
@@ -67,6 +69,28 @@ f=open('possStateActions.pkl','rb')
 possStateActions = pickle.load(f)
 f.close()
     
+# NEW FUNCTION to get 
+def get_others_boolean(played_cards):
+    other_bool = []
+    
+    played=currentState(played_cards[0])
+    
+    others=[]
+    for i in range(1,len(played_cards)):
+        others=others.append(currentState(played_cards[i]))
+    
+    # max other
+    other=map(max,zip(played_cards[1:len(played_cards)]))
+    
+    for x, y in zip(played, other):
+        if y < x:
+            other_bool.append(-1)
+        elif y == x:
+            other_bool.append(0)
+        else:
+            other_bool.append(1)
+    
+    return other_bool
 
 def qLearning(possStateActions, epsilon = .9, alpha = .5, gamma = 1, 
               measureWinPoints = np.asarray([10, 20]), numIterations = np.asarray([20, 30]),
@@ -105,9 +129,9 @@ def qLearning(possStateActions, epsilon = .9, alpha = .5, gamma = 1,
         dummy = SushiDraft(1, numPlayers, score_tokens, deck, 0) # random initialization of the game
         isPlaying = 1
         while(isPlaying): # Run through one full game, peforming control as we go
-            curr_played_cards
+            curr_played_cards=dummy.played_cards
             currState = [currentState(dummy.hand_cards[0]),
-                         currentState(dummy.played_cards[0])]
+                         currentState(curr_played_cards[0]),get_others_boolean(curr_played_cards)]
             # Selecting the possible actions corresponding to this current state
             possActions = qStateActionSpace[qStateActionSpace['state'] == str(currState)]
             # Epsilon-greedy implementation
@@ -146,8 +170,9 @@ def qLearning(possStateActions, epsilon = .9, alpha = .5, gamma = 1,
                 immedReward = 0
             
             # Figure out the Q-value of the next state
+            curr_played_cards=dummy.played_cards
             nextState = [currentState(dummy.hand_cards[0]),
-                         currentState(dummy.played_cards[0])]
+                         currentState(curr_played_cards[0]),get_others_boolean(curr_played_cards)]
             # Selecting the possible actions corresponding to this current state
             possNextActions = qStateActionSpace[qStateActionSpace['state'] == str(nextState)]
             # Check if we finished the round just now
