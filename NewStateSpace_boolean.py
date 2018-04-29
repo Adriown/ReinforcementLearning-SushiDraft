@@ -163,8 +163,17 @@ possStateActions = possStateActions[['state','action','Q']]
 
 
                         
+import pickle #for saving and opening the python object
+# Saving the objects:
+# https://stackoverflow.com/questions/6568007/how-do-i-save-and-restore-multiple-variables-in-python
+f=open('possStateActions.pkl', 'wb')  
+pickle.dump(possStateActions, f)
+f.close()
 
-
+# Getting back the possStateActions object:
+f=open('possStateActions.pkl','rb')  
+possStateActions = pickle.load(f)
+f.close()
 
 
 
