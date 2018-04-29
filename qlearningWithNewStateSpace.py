@@ -3,71 +3,48 @@
 """
 Created on Sun Apr 29 13:43:13 2018
 
-@author: Pan
+@author: Jo
 """
 import pandas as pd
 import pickle #for saving and opening the python object
-#Run functions in SushiDraft.py (all above line 362)
-
 
 '''
-NO NEED TO RUN [Begin]
+NO NEED TO RUN [Begin] --------------
 The following chunk of code is building the new state_actions space.
 I saved the python object into a new file. 
 '''
-import csv 
-import ast #for convertion from pd.df to list of list
-filename="/Users/Pan/Google Drive/Data Science/Reinforcement Learning/ReinforcementLearning-SushiDraft/statespace_boolean.csv"
-possStates_df=pd.read_csv(filename)
-possStates_df=possStates_df.drop(['Unnamed: 0'],axis=1)
-        #0: Hand states
-        #1: Played States
-        #2: Other States
 
-# The original possStates is a list of list. 
-# The following part is trying to convert pd to list of list. (sorry that it is kind of slow ~ 5min) 
-possStates=list()
-for i in range(len(possStates_df)):
-    theRow=list()
-    for j in range(3):      
-        theRow.append(ast.literal_eval(possStates_df.iloc[i][j]))
-    possStates.append(theRow)                  
 
-# THIS PART IS HUGE. I'm constructing a comprehensive state-action space to hold. sorry, it is very very slow. (begin: 4:06pm)
-# Used the function in SushiDraft.py
-possStateActions = DataFrame()
-possStatesLen=len(possStates)
-for i in range(possStatesLen): # Run through each of the states we've identified
-    if i%1000==0:
-        print ("{0:.0f}%".format(i/possStatesLen * 100))
-        
-    possStateAction = DataFrame()
-    # And now identify every single possible action for that state
-    possStateAction['action'] = possibleActions(possStates[i][0], possStates[i][1])
-    # Note that in order to get this to work, I needed to make the state a string
-    possStateActions['state'] = str(possStates[i])
-    possStateActions = possStateActions.append(possStateAction)
+#run SushiDraft to get **possStateActions** (the old version, to be updated) [37379 rows]
+#run NewStateSpace_boolean.py to get **possStates** (the updated one) [296595 rows]
 
-# ------------------------------------------- I have not run the code below ------------------------------------    
-possStateActions = possStateActions.reset_index()
-possStateActions = possStateActions.drop('index', axis = 1)
-possStateActions['Q'] = 0
-possStateActions = possStateActions[['state','action','Q']]
+import ast #for convertion from 'list' to [list]
+
+possStates_df=DataFrame.from_records(possStates) 
+new_possStates=DataFrame.copy(possStates_df)
+new_possStates['state']=new_possStates[[0,1]].values.tolist() #combine the  hand and column like the possStateActions
+new_possStates['state']=new_possStates['state'].apply(str) #convert to string like the possStateActions
+new_possStatesActions=pd.merge(new_possStates, possStateActions, on='state')  #[1586152 rows] 
+
+new_possStatesActions['state']=new_possStatesActions[[0,1,2]].values.tolist()
+
+possStatesActions=new_possStatesActions[['state','action']]
+
 
 # Saving the objects:
-# https://stackoverflow.com/questions/6568007/how-do-i-save-and-restore-multiple-variables-in-python
-f=open('possStateActions.pkl', 'wb')  
-pickle.dump(possStateActions, f)
-f.close()
+possStatesActions.to_pickle('/Users/Pan/Google Drive/Data Science/Reinforcement Learning/ReinforcementLearning-SushiDraft/possStateActions.pkl')
+
 
 '''
-NO NEED TO RUN [End]
+NO NEED TO RUN [End] -------------
 '''
 
 # Getting back the possStateActions object:
-f=open('possStateActions.pkl','rb')  
+f=open('/Users/Pan/Google Drive/Data Science/Reinforcement Learning/ReinforcementLearning-SushiDraft/possStateActions.pkl','rb')  
 possStateActions = pickle.load(f)
 f.close()
+
+possStateActions['Q'] = 0
     
 # NEW FUNCTION to get 
 def get_others_boolean(played_cards):
