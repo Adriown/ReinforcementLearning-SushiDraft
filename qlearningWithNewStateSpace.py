@@ -407,6 +407,7 @@ def qLearning(possStateActions, epsilon = .9, alpha = .5, gamma = 1,
 # Run example
 qStateActionSpace,_=qLearning(possStateActions)
 qLearning(possStateActions, evalPolicySpace = qStateActionSpace)
+qStateActionSpace['state'] = qStateActionSpace['state'].apply(str)   
 qStateActionSpace, win_percents = qLearning(qStateActionSpace.drop(['method'], axis = 1),
                                             measureWinPoints = np.asarray([1]), 
                                             numIterations = np.asarray([1000]))
