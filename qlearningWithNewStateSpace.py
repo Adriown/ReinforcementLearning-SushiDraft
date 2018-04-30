@@ -38,7 +38,160 @@ possStatesActions.to_pickle('/Users/Pan/Google Drive/Data Science/Reinforcement 
 '''
 NO NEED TO RUN [End] -------------
 '''
+'''
+Adrian's new definition of the class  ----------
+    ends at line 194
+'''
 
+class SushiDraft:
+    """
+    The SushiDraft class embodies an instance of the game. It initializes a configuration
+    of the game based on the parameters passed to it. By default, the behavior is to 
+    initialize a random game at the very beginning of play.
+    
+    The primary way of interacting with the SushiDraft instance from outside of the class
+    is with the takeTurn function. takeTurn() is passed cards to play for each player, cards to
+    save for each player, and if any of the cards played are being done as a wildcard
+    """
+    def __init__(self, num_round, num_players, score_tokens_avail, deck, num_cards_played, hand_cards = [], played_cards = [], player_tokens = Series(), one_player_hands = [], suppressPrint = True):  # constructor
+#        fields: num_round, num_players, score_tokens_avail (a Series), deck (a list), num_cards_played 
+#        (from 0 to 4 when initializing), hand_cards (a list of ndarrays), played_cards 
+#        (a list of ndarrays), and player_tokens (a Series)
+        # Initialization function
+        self.num_round = num_round
+        self.num_players = num_players
+        self.score_tokens_avail = score_tokens_avail
+        self.deck = deck
+        self.num_cards_played = num_cards_played
+        self.one_player_hands = one_player_hands
+        self.suppressPrint = suppressPrint
+        if len(hand_cards) == 0:
+            # This is basically the case where you shuffle the deck
+#            np.random.seed(1)
+            if len(one_player_hands) != 0: # This is the case where we go in and explicity give the first player a specific hand
+                new_deck = deck.copy()
+                [new_deck.remove(card) for card in one_player_hands[0]]
+                self.hand_cards = np.array_split(np.random.choice(new_deck, 6 * (num_players - 1), False), num_players - 1)
+                self.hand_cards.insert(0, one_player_hands[0])
+            else: # Everyone gets a random hand
+                self.hand_cards = np.array_split(np.random.choice(deck, 6 * num_players, False), num_players)
+        else:
+            # If we want to initialize a non-random game with specific hands
+            self.hand_cards = hand_cards
+        if len(played_cards) == 0:
+            # No cards played yet in default case
+            self.played_cards = [np.empty(0, dtype='int') for i in range(num_players)]
+        else:
+            self.played_cards = played_cards
+        if len(player_tokens) == 0:
+            # This is just going to initialize everyone to having no points yet
+            self.player_tokens = Series([0 for i in range(num_players)], 
+                                        [i for i in range(num_players)])
+        else:
+            self.player_tokens = player_tokens
+            
+    def takeTurn(self, play_cards, save_cards = [], is_wild = [0, 0, 0, 0, 0]): # go through a move
+        # fields: play_cards (a list of the cards played in order),
+        #         save_cards (a list of the cards saved in order), and
+        #         is_wild (a list saying if a card being played is a wildcard (2)) <- only referring to play_cards
+        # Track how many cards have been played
+        self.num_cards_played += 1
+        # Add the play_cards to the played_cards for each player
+        self.played_cards = [np.append(self.played_cards[i], play_cards[i]) for i in range(len(play_cards))] 
+        if self.num_cards_played == 5:  # All cards have been played for the round
+            # GO THROUGH THE MOTION OF EVALUATING THE PLAYERS AND HANDING OUT TOKENS
+            val_counts = [np.unique(player, return_counts=True) for player in self.played_cards]
+            for group in np.unique(list(self.score_tokens_avail.index)): # UPDATE SCORES
+                if group == 2:
+                    # THIS IS FOR THE PLAYER WITH THE MOST DIVERSITY
+                    group_counts = [len(player[0]) for player in val_counts]
+                    best_player = SushiDraft.winningPlayer(group_counts)
+                    if best_player is None:
+                        continue
+                    self.passScoreToken(best_player, group)
+                else:
+                    # THIS IS FOR ALL OTHER CASES; WE'RE JUST LOOKING FOR THE MOST OF A CATEGORY
+                    group_counts = [player[1][np.where(player[0] == group)] for player in val_counts]
+                    group_counts = [np.append(player, 0)[0] if len(player) == 0 else player[0] for player in group_counts]
+                    best_player = SushiDraft.winningPlayer(group_counts)
+                    if best_player is None:
+                        continue
+                    self.passScoreToken(best_player, group)
+            if self.num_round == 3: # This is for the case where we've finished the 3rd round
+                self.num_cards_played = 0
+                # EXIT GAME
+                if self.suppressPrint == False:
+                    print("GAME IS OVER")
+                    print("Results:")
+                    print(self.player_tokens)
+                return 0
+            # RESET THE GAME NOW THAT POINTS HAVE BEEN HANDED OUT
+#            np.random.seed(1)
+            self.num_round += 1
+            if len(self.one_player_hands) != 0:# Again, this is when we want to initialize our player with a specific hand
+                new_deck = deck.copy()
+                [new_deck.remove(card) for card in self.one_player_hands[self.num_round - 1]]
+                self.hand_cards = np.array_split(np.random.choice(new_deck, 6 * (self.num_players - 1), False), self.num_players - 1)
+                self.hand_cards.insert(0, self.one_player_hands[self.num_round - 1])
+            else:
+                self.hand_cards = np.array_split(np.random.choice(deck, 6 * self.num_players, False), self.num_players)
+            self.num_cards_played = 0
+            self.played_cards = [np.empty(0, dtype='int') for i in range(self.num_players)]
+        else: # This is the portion where you save a card in your hand and pass, etc.
+            for i in range(len(self.hand_cards)): # Make sure that we correctly account for wildcards
+                if is_wild[i]:
+                    play_cards[i] = 2
+            # UPDATE HANDS AFTER PLAYING CARD
+            self.hand_cards = [np.delete(self.hand_cards[i], np.where(self.hand_cards[i] == play_cards[i])[0][0]) for i in range(len(self.hand_cards))]
+            # UPDATE HANDS AFTER SAVING CARD
+            self.hand_cards = [np.delete(self.hand_cards[i], np.where(self.hand_cards[i] == save_cards[i])[0][0]) for i in range(len(self.hand_cards))]
+            # PASS THE CARDS
+            self.hand_cards = [self.hand_cards[i-1] if i > 0 else self.hand_cards[self.num_players - 1] for i in range(len(self.hand_cards))]
+            # ADD THE SAVED CARD TO THE HAND
+            self.hand_cards = [np.append(self.hand_cards[i], save_cards[i]) for i in range(len(self.hand_cards))]
+        return 1
+    
+    def winningPlayer(group_counts):
+        # Take as input the counts for each player of their cards for any of the specific 
+        # scoring categories. Then return the winning player (or None if there isn't any)
+        unique, counts = np.unique(np.asarray(group_counts), return_counts = True)
+        # Get the people with NO ties
+        no_ties = unique[np.where(counts == 1)]
+        if len(no_ties) == 0:
+            return None # No points awarded; no one had a unique diversity
+        if len(no_ties) == 1 and no_ties[0] == 0:
+            return None # No points awarded; no one had a unique diversity
+        # Now get the best player
+        best_count = np.sort(no_ties)[-1]
+        best_player = np.where(group_counts == best_count)[0]
+        return best_player
+    def passScoreToken(self, winner, category):
+        # You pass a winning player (a single number 0-5) and an associated category 
+        # (a single number 2, 4:8), and then give that player a random point from 
+        # that category. Then update the score_tokens_avail
+        if type(self.score_tokens_avail[category]) == np.int64: # For whatever reason np.random.choice does not work correctly on
+            # a 1-element array
+            token_won = self.score_tokens_avail[category]
+        else:
+            token_won = np.random.choice(self.score_tokens_avail[category], 1)[0]
+        # Give the winner the token at random
+        self.player_tokens[winner] += token_won
+        remove_this_token = Series(token_won, [category])
+#        remove_this_loc = np.asarray(list(remove_this_token.index)[0] == list(dummy.score_tokens_avail.index)) & \
+#            np.asarray(list(remove_this_token.values)[0] == list(dummy.score_tokens_avail.values))
+        # Find the tokens in the set of available tokens that match the one that was selected (match the index and value)
+        remove_this_loc = np.where(list(remove_this_token.index)[0] == self.score_tokens_avail.index, True, False) & \
+            np.where(list(remove_this_token.values)[0] == self.score_tokens_avail.values, True, False)
+        # Ensure only first True value used
+        remove_this_loc = remove_this_loc & np.cumsum(remove_this_loc) == 1 
+        # Remove the score tokens out of circulation
+        self.score_tokens_avail = self.score_tokens_avail[np.logical_not(remove_this_loc)]
+    
+    def __str__(self):
+        return 'Sushi Draft game in round ' + str(self.num_round) + ' with ' \
+                + str(self.num_players) + ' players and ' + str(self.num_cards_played) + ' cards played.' \
+                + ' The hands consist of ' + str(self.hand_cards)
+                
 # Getting back the possStateActions object:
 f=open('/Users/Pan/Google Drive/Data Science/Reinforcement Learning/ReinforcementLearning-SushiDraft/possStateActions.pkl','rb')  
 possStateActions = pickle.load(f)
@@ -47,7 +200,9 @@ f.close()
 possStateActions['Q'] = 0
 possStateActions['state'] = possStateActions['state'].apply(str)   
 
-# NEW FUNCTION to get 
+'''
+NEW FUNCTION 1
+'''
 def get_others_boolean(played_cards):
 
     played=currentState(played_cards[0])
@@ -69,6 +224,73 @@ def get_others_boolean(played_cards):
             other_bool.append(1)
     
     return other_bool
+
+'''
+UPDATED FUNCTION 1
+'''
+def evaluatePolicy(num_iters, num_trials, qStateActionSpace, numPlayers, method, policySpace = None):
+    """
+    Many of our functions are performing policy control and, during that process, 
+    evaluating the performance of our policy we've been training. Ideally we can 
+    just put all of that code into one function that is called by every other function.
+    
+    It takes how many trials of the game
+    """
+
+    # Initialize some counts of to keep track of winners
+    win_counts = Series([0] * numPlayers, range(numPlayers))
+    # We can use these next two to figure out what percentage of the state-space we actually visited across out trials
+    no_value = 0 
+    total_values = 0
+    # Run the optimal policy across num_trials number of games
+    for j in range(num_trials):# Play the game some set number of times
+        dummy = SushiDraft(1, numPlayers, score_tokens, deck, 0) # random initialization of the game
+        isPlaying = 1
+        while(isPlaying):
+            total_values += 1
+            curr_played_cards=dummy.played_cards
+            currState = [currentState(dummy.hand_cards[0]),
+                         currentState(curr_played_cards[0]),get_others_boolean(curr_played_cards)]
+            # Selecting the possible actions corresponding to this current state
+            possActions = qStateActionSpace[qStateActionSpace['state'] == str(currState)]
+            
+            # Figure out what proportion of states haven't been visited
+            if possActions.sample(len(possActions))['Q'].max() == 0:
+                no_value += 1
+            
+            # Now decide which action to take -- follow optimal
+            piActionIndex = possActions.sample(len(possActions))['Q'].idxmax()
+            
+            # Now record what our character is going to do
+            play_card, keep_card, is_wildcard = possActions.loc[piActionIndex]['action']
+            
+            # Figure out what the competition is going to do
+            if policySpace is None: # Use the random agent to play
+                play_cards, keep_cards, is_wildcards = randomMoves(dummy.hand_cards, dummy.played_cards, range(1, dummy.num_players))
+            else: # Use a trained agent to play
+                play_cards, keep_cards, is_wildcards = policyMoves(dummy.hand_cards, dummy.played_cards, policySpace, range(1, dummy.num_players))
+            play_cards.insert(0, play_card)
+            keep_cards.insert(0, keep_card)
+            is_wildcards.insert(0, is_wildcard)
+                
+            # Take a turn of the game
+            isPlaying = dummy.takeTurn(play_cards, keep_cards, is_wildcards)
+        # Figure out who won
+        win_counts += getWinner(dummy.player_tokens)
+    # Go through and format the DataFrame() the way we want
+    win_percent = DataFrame(win_counts, columns = ['nWins'])
+    win_percent['nTrials'] = num_trials
+    win_percent['player'] = range(numPlayers)
+    win_percent['nTrainIter'] = num_iters
+    win_percent['winPercent'] = win_percent['nWins'] / win_percent['nTrials']
+    # Append a method for the sake of remembering what we did
+    win_percent['method'] = method
+    win_percent = win_percent[['method', 'player','nTrainIter', 'nTrials', 'nWins', 'winPercent']]
+    return win_percent
+
+'''
+UPDATED FUNCTION 2: qLearning
+'''
 
 def qLearning(possStateActions, epsilon = .9, alpha = .5, gamma = 1, 
               measureWinPoints = np.asarray([10, 20]), numIterations = np.asarray([20, 30]),
