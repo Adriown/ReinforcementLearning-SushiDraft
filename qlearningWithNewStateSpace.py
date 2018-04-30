@@ -45,20 +45,21 @@ possStateActions = pickle.load(f)
 f.close()
 
 possStateActions['Q'] = 0
-    
+possStateActions['state'] = possStateActions['state'].apply(str)   
+
 # NEW FUNCTION to get 
 def get_others_boolean(played_cards):
-    other_bool = []
-    
+
     played=currentState(played_cards[0])
     
     others=[]
     for i in range(1,len(played_cards)):
-        others=others.append(currentState(played_cards[i]))
-    
+        others.append(currentState(played_cards[i]))
+        
     # max other
-    other=map(max,zip(played_cards[1:len(played_cards)]))
+    other=list(map(max,list(zip(*others))))
     
+    other_bool = []
     for x, y in zip(played, other):
         if y < x:
             other_bool.append(-1)
@@ -109,6 +110,8 @@ def qLearning(possStateActions, epsilon = .9, alpha = .5, gamma = 1,
             curr_played_cards=dummy.played_cards
             currState = [currentState(dummy.hand_cards[0]),
                          currentState(curr_played_cards[0]),get_others_boolean(curr_played_cards)]
+                         #sample currState: [[0, 2, 1, 0, 2, 1], [0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0]]
+                         
             # Selecting the possible actions corresponding to this current state
             possActions = qStateActionSpace[qStateActionSpace['state'] == str(currState)]
             # Epsilon-greedy implementation
@@ -178,3 +181,10 @@ def qLearning(possStateActions, epsilon = .9, alpha = .5, gamma = 1,
     qStateActionSpace = qStateActionSpace[['method', 'state', 'action', 'Q']]
     # Return the q-state action values and our optimal policy win rates
     return (qStateActionSpace, win_percents)
+
+# Run example
+qStateActionSpace,_=qLearning(possStateActions)
+qLearning(possStateActions, evalPolicySpace = qStateActionSpace)
+qStateActionSpace, win_percents = qLearning(qStateActionSpace.drop(['method'], axis = 1),
+                                            measureWinPoints = np.asarray([1]), 
+                                            numIterations = np.asarray([1000]))
