@@ -199,7 +199,7 @@ f.close()
 
 possStateActions['Q'] = 0
 possStateActions['state'] = possStateActions['state'].apply(str)   
-
+#possStateActions['state'][12000]
 '''
 NEW FUNCTION 1
 '''
@@ -216,7 +216,7 @@ def get_others_boolean(played_cards):
     
     other_bool = []
     for x, y in zip(played, other):
-        if y < x:
+        if x>y:
             other_bool.append(-1)
         elif y == x:
             other_bool.append(0)
@@ -252,11 +252,15 @@ def evaluatePolicy(num_iters, num_trials, qStateActionSpace, numPlayers, method,
             currState = [currentState(dummy.hand_cards[0]),
                          currentState(curr_played_cards[0]),get_others_boolean(curr_played_cards)]
             # Selecting the possible actions corresponding to this current state
-            possActions = qStateActionSpace[qStateActionSpace['state'] == str(currState)]
             
+            qStateActionSpace['state'] = qStateActionSpace['state'].apply(str)
+            possActions = qStateActionSpace[qStateActionSpace['state'] == str(currState)]
+  
+                
             # Figure out what proportion of states haven't been visited
+            
             if possActions.sample(len(possActions))['Q'].max() == 0:
-                no_value += 1
+                    no_value += 1
             
             # Now decide which action to take -- follow optimal
             piActionIndex = possActions.sample(len(possActions))['Q'].idxmax()
@@ -406,8 +410,10 @@ def qLearning(possStateActions, epsilon = .9, alpha = .5, gamma = 1,
 
 # Run example
 qStateActionSpace,_=qLearning(possStateActions)
+
+# RUN this everytime when passing qStateActionSpace as an parameter !!!!
+qStateActionSpace['state'] = qStateActionSpace['state'].apply(str) 
 qLearning(possStateActions, evalPolicySpace = qStateActionSpace)
-qStateActionSpace['state'] = qStateActionSpace['state'].apply(str)   
 qStateActionSpace, win_percents = qLearning(qStateActionSpace.drop(['method'], axis = 1),
                                             measureWinPoints = np.asarray([1]), 
                                             numIterations = np.asarray([1000]))
