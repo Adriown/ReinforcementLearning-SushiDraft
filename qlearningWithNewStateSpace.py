@@ -193,9 +193,7 @@ class SushiDraft:
                 + ' The hands consist of ' + str(self.hand_cards)
                 
 # Getting back the possStateActions object:
-f=open('/Users/Pan/Google Drive/Data Science/Reinforcement Learning/ReinforcementLearning-SushiDraft/possStateActions.pkl','rb')  
-possStateActions = pickle.load(f)
-f.close()
+possStateActions = pd.read_pickle('/Users/mead/Spring2018/ReinforcementLearning/ForFun/ReinforcementLearning-SushiDraft/possStateActions.pkl')
 
 possStateActions['Q'] = 0
 possStateActions['state'] = possStateActions['state'].apply(str)   
@@ -203,20 +201,23 @@ possStateActions['state'] = possStateActions['state'].apply(str)
 '''
 NEW FUNCTION 1
 '''
-def get_others_boolean(played_cards):
+def get_others_boolean(played_cards, player_of_interest):
 
-    played=currentState(played_cards[0])
+    played=currentState(played_cards[player_of_interest])
     
     others=[]
-    for i in range(1,len(played_cards)):
-        others.append(currentState(played_cards[i]))
+    for i in range(len(played_cards)):
+        if i == player_of_interest:
+            continue
+        else:
+            others.append(currentState(played_cards[i]))
         
     # max other
     other=list(map(max,list(zip(*others))))
     
     other_bool = []
     for x, y in zip(played, other):
-        if x>y:
+        if x<y:
             other_bool.append(-1)
         elif y == x:
             other_bool.append(0)
@@ -228,7 +229,8 @@ def get_others_boolean(played_cards):
 '''
 UPDATED FUNCTION 1
 '''
-def evaluatePolicy(num_iters, num_trials, qStateActionSpace, numPlayers, method, policySpace = None):
+
+def evaluatePolicy(num_iters, num_trials, qStateActionSpace, numPlayers, method, stateSize, policySpace = None):
     """
     Many of our functions are performing policy control and, during that process, 
     evaluating the performance of our policy we've been training. Ideally we can 
@@ -245,15 +247,23 @@ def evaluatePolicy(num_iters, num_trials, qStateActionSpace, numPlayers, method,
     # Run the optimal policy across num_trials number of games
     for j in range(num_trials):# Play the game some set number of times
         dummy = SushiDraft(1, numPlayers, score_tokens, deck, 0) # random initialization of the game
+        print(j)
         isPlaying = 1
         while(isPlaying):
             total_values += 1
             curr_played_cards=dummy.played_cards
-            currState = [currentState(dummy.hand_cards[0]),
-                         currentState(curr_played_cards[0]),get_others_boolean(curr_played_cards)]
-            # Selecting the possible actions corresponding to this current state
             
-            qStateActionSpace['state'] = qStateActionSpace['state'].apply(str)
+            if stateSize == 'small':
+                currState = [currentState(dummy.hand_cards[0]),
+                             currentState(curr_played_cards[0])]
+            elif stateSize == 'medium':
+                currState = [currentState(dummy.hand_cards[0]),
+                             currentState(curr_played_cards[0]),
+                             get_others_boolean(curr_played_cards, 0)]
+            else:
+                stop("That state size is not supported")
+
+            # Selecting the possible actions corresponding to this current state
             possActions = qStateActionSpace[qStateActionSpace['state'] == str(currState)]
   
                 
@@ -272,7 +282,7 @@ def evaluatePolicy(num_iters, num_trials, qStateActionSpace, numPlayers, method,
             if policySpace is None: # Use the random agent to play
                 play_cards, keep_cards, is_wildcards = randomMoves(dummy.hand_cards, dummy.played_cards, range(1, dummy.num_players))
             else: # Use a trained agent to play
-                play_cards, keep_cards, is_wildcards = policyMoves(dummy.hand_cards, dummy.played_cards, policySpace, range(1, dummy.num_players))
+                play_cards, keep_cards, is_wildcards = policyMoves(dummy.hand_cards, dummy.played_cards, policySpace, stateSize, range(1, dummy.num_players))
             play_cards.insert(0, play_card)
             keep_cards.insert(0, keep_card)
             is_wildcards.insert(0, is_wildcard)
@@ -289,14 +299,47 @@ def evaluatePolicy(num_iters, num_trials, qStateActionSpace, numPlayers, method,
     win_percent['winPercent'] = win_percent['nWins'] / win_percent['nTrials']
     # Append a method for the sake of remembering what we did
     win_percent['method'] = method
-    win_percent = win_percent[['method', 'player','nTrainIter', 'nTrials', 'nWins', 'winPercent']]
+    win_percent['size'] = stateSize
+    win_percent = win_percent[['method', 'size', 'player','nTrainIter', 'nTrials', 'nWins', 'winPercent']]
     return win_percent
+"""
+Updated Function 2
+"""
+
+def policyMoves(hands, already_played_cards, qStateActionSpace, stateSize, policy_players = [1, 2, 3, 4]):
+    """
+    Takes a list of cards in hands and cards already played (usually from the SushiDraft attributes),
+    as well as the qStateActionSpace for the policy we want these players to follow.
+    And returns moves under the passed policy. policy_players can allow you to control whether or not a 
+    certain players moves are made as following the policy. NOTE: player 0 is usually the one we're training.
+    """
+    play_cards, keep_cards, is_wildcards = ([], [], [])
+
+    for i in policy_players:
+        # Use a nonrandom policy
+        if stateSize == 'small':
+            state = [currentState(hands[i]),
+                         currentState(already_played_cards[i])]
+        elif stateSize == 'medium':
+            state = [currentState(hands[i]),
+                         currentState(already_played_cards[i]),
+                         get_others_boolean(already_played_cards, i)]
+        else:
+            stop("That state size is not supported")
+
+        #state = [currentState(hands[i]), currentState(already_played_cards[i]), get_others_boolean(already_played_cards, i)]
+        play_card, keep_card, is_wildcard = qStateActionSpace.loc[qStateActionSpace[qStateActionSpace['state'] == str(state)]['Q'].idxmax(), 'action']
+        play_cards.append(play_card)
+        keep_cards.append(keep_card)
+        is_wildcards.append(is_wildcard)
+    return (play_cards, keep_cards, is_wildcards)
+
 
 '''
-UPDATED FUNCTION 2: qLearning
+UPDATED FUNCTION 3: qLearning
 '''
 
-def qLearning(possStateActions, epsilon = .9, alpha = .5, gamma = 1, 
+def qLearning(possStateActions, stateSize, epsilon = .9, alpha = .5, gamma = 1, 
               measureWinPoints = np.asarray([10, 20]), numIterations = np.asarray([20, 30]),
               numPlayers = 5, score_tokens = score_tokens, deck = deck, 
               trainPolicySpace = None, evalPolicySpace= None):
@@ -329,15 +372,23 @@ def qLearning(possStateActions, epsilon = .9, alpha = .5, gamma = 1,
     numIterations = np.asarray(numIterations)
     win_percents = DataFrame() # Track the win percentages across players (draws count as wins)
     for i in range(1, max(measureWinPoints) + 1): # Perform the algorithm as many times as we want
+        print(i)
         totalReward = 0
         dummy = SushiDraft(1, numPlayers, score_tokens, deck, 0) # random initialization of the game
         isPlaying = 1
         while(isPlaying): # Run through one full game, peforming control as we go
             curr_played_cards=dummy.played_cards
-            currState = [currentState(dummy.hand_cards[0]),
-                         currentState(curr_played_cards[0]),get_others_boolean(curr_played_cards)]
-                         #sample currState: [[0, 2, 1, 0, 2, 1], [0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0]]
-                         
+            
+            if stateSize == 'small':
+                currState = [currentState(dummy.hand_cards[0]),
+                             currentState(curr_played_cards[0])]
+            elif stateSize == 'medium':
+                currState = [currentState(dummy.hand_cards[0]),
+                             currentState(curr_played_cards[0]),
+                             get_others_boolean(curr_played_cards, 0)]
+            else:
+                stop("That state size is not supported")
+                
             # Selecting the possible actions corresponding to this current state
             possActions = qStateActionSpace[qStateActionSpace['state'] == str(currState)]
             # Epsilon-greedy implementation
@@ -359,7 +410,13 @@ def qLearning(possStateActions, epsilon = .9, alpha = .5, gamma = 1,
             if trainPolicySpace is None: # Use the random agent to play
                 play_cards, keep_cards, is_wildcards = randomMoves(dummy.hand_cards, dummy.played_cards, range(1, dummy.num_players))
             else: # Use a trained agent to play
-                play_cards, keep_cards, is_wildcards = policyMoves(dummy.hand_cards, dummy.played_cards, trainPolicySpace, range(1, dummy.num_players))
+                print("HERE")
+                play_cards, keep_cards, is_wildcards = policyMoves(hands = dummy.hand_cards, 
+                                                                   already_played_cards = dummy.played_cards, 
+                                                                   qStateActionSpace = trainPolicySpace, 
+                                                                   stateSize = stateSize, 
+                                                                   policy_players = range(1, dummy.num_players))
+                print("HERE2")
             play_cards.insert(0, play_card)
             keep_cards.insert(0, keep_card)
             is_wildcards.insert(0, is_wildcard)
@@ -377,8 +434,17 @@ def qLearning(possStateActions, epsilon = .9, alpha = .5, gamma = 1,
             
             # Figure out the Q-value of the next state
             curr_played_cards=dummy.played_cards
-            nextState = [currentState(dummy.hand_cards[0]),
-                         currentState(curr_played_cards[0]),get_others_boolean(curr_played_cards)]
+            
+            if stateSize == 'small':
+                nextState = [currentState(dummy.hand_cards[0]),
+                             currentState(curr_played_cards[0])]
+            elif stateSize == 'medium':
+                nextState = [currentState(dummy.hand_cards[0]),
+                             currentState(curr_played_cards[0]),
+                             get_others_boolean(curr_played_cards, 0)]
+            else:
+                stop("That state size is not supported")
+
             # Selecting the possible actions corresponding to this current state
             possNextActions = qStateActionSpace[qStateActionSpace['state'] == str(nextState)]
             # Check if we finished the round just now
@@ -400,20 +466,35 @@ def qLearning(possStateActions, epsilon = .9, alpha = .5, gamma = 1,
             print("Evaluating the win percentage of our trained agent after " + str(i) + \
                   " iterations of the game. Going to perform " + str(num_trials) + " trials.")
             win_percent = evaluatePolicy(i, num_trials, qStateActionSpace, 
-                                         numPlayers, 'q-learning', evalPolicySpace)
+                                         numPlayers, 'q-learning', stateSize, evalPolicySpace)
+
             # Now append the new percentages
             win_percents = win_percents.append(win_percent)
     qStateActionSpace['method'] = 'q-learning'
-    qStateActionSpace = qStateActionSpace[['method', 'state', 'action', 'Q']]
+    qStateActionSpace['size'] = stateSize
+    
+    qStateActionSpace = qStateActionSpace[['method', 'size', 'state', 'action', 'Q']]
     # Return the q-state action values and our optimal policy win rates
     return (qStateActionSpace, win_percents)
 
 # Run example
-qStateActionSpace,_=qLearning(possStateActions)
+qStateActionSpace,qWinPercents=qLearning(possStateActions, measureWinPoints=[2], numIterations = [2], stateSize = 'medium')
 
 # RUN this everytime when passing qStateActionSpace as an parameter !!!!
-qStateActionSpace['state'] = qStateActionSpace['state'].apply(str) 
-qLearning(possStateActions, evalPolicySpace = qStateActionSpace)
+#qStateActionSpace['state'] = qStateActionSpace['state'].apply(str) 
+qLearning(possStateActions, 
+          trainPolicySpace = qStateActionSpace, 
+          #evalPolicySpace = qStateActionSpace,
+          measureWinPoints=[2], numIterations = [2], stateSize = 'medium')
 qStateActionSpace, win_percents = qLearning(qStateActionSpace.drop(['method'], axis = 1),
                                             measureWinPoints = np.asarray([1]), 
                                             numIterations = np.asarray([1000]))
+
+
+
+
+
+
+
+
+
